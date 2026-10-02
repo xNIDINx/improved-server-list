@@ -1,0 +1,34 @@
+# Local development and generated output
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.tmp
+*.bak
+build-artifacts/
+test-artifacts/
+dist/
+build/
+*.mtmod
+*.zip
+*.swf
+
+# Local configuration, private credentials and game data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+online.json
+development.json
+cache.json
+preferences.xml
+mods/configs/
+mods/temp/
+references/
+tools/
+sdk/
