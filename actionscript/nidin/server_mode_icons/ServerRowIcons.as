@@ -53,6 +53,7 @@ package nidin.server_mode_icons
       private var columns:int = 0;
       private var ownIconWidth:Number = 0;
       private var columnIconWidth:Number = 0;
+      private var sharedOffsets:Object;
       private var modesDirty:Boolean = true;
       private var isDropdown:Boolean;
       private var lastInput:Object;
@@ -133,9 +134,10 @@ package nidin.server_mode_icons
       {
          row = target;
          servers = modes;
-         columns = Math.max(0, Math.min(6, columnCount));
+         columns = Math.max(0, Math.min(7, columnCount));
          columnIconWidth = measureColumnWidth(modes, columns);
          isDropdown = isServerDropDown(target);
+         sharedOffsets = isDropdown ? null : sharedIconOffsets(modes, columns);
          released = onReleased;
          strip = new Sprite();
          strip.name = STRIP_NAME;
@@ -182,8 +184,9 @@ package nidin.server_mode_icons
       {
          servers = modes;
          watchProvider();
-         var nextColumns:int = Math.max(0, Math.min(6, columnCount));
+         var nextColumns:int = Math.max(0, Math.min(7, columnCount));
          var nextWidth:Number = measureColumnWidth(modes, nextColumns);
+         sharedOffsets = isDropdown ? null : sharedIconOffsets(modes, nextColumns);
          if(nextColumns != columns || nextWidth != columnIconWidth || modeKey(modesFor(getServer())) != iconKey)
          {
             modesDirty = true;
@@ -361,7 +364,7 @@ package nidin.server_mode_icons
 
       public static function popupIconReserve(modes:Object, columnCount:int) : Number
       {
-         var count:int = Math.max(0, Math.min(6, columnCount));
+         var count:int = Math.max(0, Math.min(7, columnCount));
          return count > 0 ? measureColumnWidth(modes, count) + VISIBLE_GAP - LIST_BORDER_OFFSET : 0;
       }
 
@@ -889,7 +892,7 @@ package nidin.server_mode_icons
                if(mode != null && mode.icon != null && String(mode.icon) != "")
                {
                   result.push(mode);
-                  if(result.length >= 6)
+                  if(result.length >= 7)
                   {
                      break;
                   }
@@ -904,7 +907,10 @@ package nidin.server_mode_icons
          var key:String = "";
          for each(var mode:Object in modes)
          {
-            key += String(mode.icon) + (mode.active === false ? ":dim\n" : ":active\n");
+            var source:String = String(mode.icon);
+            var offset:String = sharedOffsets != null && sharedOffsets.hasOwnProperty(source) ?
+               String(sharedOffsets[source]) : "compact";
+            key += source + ":" + offset + (mode.active === false ? ":dim\n" : ":active\n");
          }
          return key;
       }
@@ -942,6 +948,7 @@ package nidin.server_mode_icons
       // Transparent margins must not affect artwork height, spacing or hover.
       private static function sourceIconBounds(source:String) : Rectangle
       {
+         if(source.indexOf("/stronghold.png") >= 0) return new Rectangle(2, 2.5, 15.5, 15);
          if(source.indexOf("/frontline.png") >= 0) return new Rectangle(1.5625, 0.3125, 17.1875, 19.6875);
          if(source.indexOf("/rift.png") >= 0) return new Rectangle(2.5, 3, 15, 16);
          if(source.indexOf("/arcade.png") >= 0) return new Rectangle(3, 2.5, 14, 15);
@@ -968,6 +975,149 @@ package nidin.server_mode_icons
          var left:Number = iconLeft(source);
          return new Rectangle(image.x + left, 0, iconRight(source) - left, VISIBLE_ICON_HEIGHT);
       }
+
+      /** Reuse a complete row as a grid only when every row fits its order.
+       * Otherwise keep the existing compact layout and its original width. */
+      private static function sharedIconOffsets(modes:Object, limit:int) : Object
+      {
+         if(modes == null || limit <= 0 || limit > 7)
+         {
+            return null;
+         }
+         var reference:Array = null;
+         var rows:Array = [];
+         for each(var entry:Object in modes)
+         {
+            if(!(entry is Array))
+            {
+               continue;
+            }
+            var sources:Array = [];
+            for each(var marker:Object in entry)
+            {
+               if(marker != null && marker.icon != null && String(marker.icon) != "")
+               {
+                  sources.push(String(marker.icon));
+                  if(sources.length >= 7)
+                  {
+                     break;
+                  }
+               }
+            }
+            rows.push(sources);
+            if(reference == null && sources.length == limit)
+            {
+               reference = sources;
+            }
+         }
+         if(reference == null)
+         {
+            return null;
+         }
+         var offsets:Object = {};
+         var cursor:Number = 0;
+         for each(var source:String in reference)
+         {
+            if(offsets.hasOwnProperty(source))
+            {
+               return null;
+            }
+            offsets[source] = cursor;
+            cursor += iconRight(source) - iconLeft(source) + VISIBLE_GAP;
+         }
+         for each(var items:Array in rows)
+         {
+            var previous:int = -1;
+            for each(var item:String in items)
+            {
+               var index:int = reference.indexOf(item);
+               if(index <= previous)
+               {
+                  return sharedAlternativeOffsets(rows, limit);
+               }
+               previous = index;
+            }
+         }
+         return offsets;
+      }
+
+
+      /** Share the left slot between alternatives when every nonempty row
+       * has the same remaining modes. Images keep their data/tooltip order;
+       * only their positions change, within the existing measured width. */
+      private static function sharedAlternativeOffsets(rows:Array, limit:int) : Object
+      {
+         if(limit <= 1)
+         {
+            return null;
+         }
+         var common:Array = null;
+         for each(var row:Array in rows)
+         {
+            if(row.length == 0)
+            {
+               continue;
+            }
+            var seen:Object = {};
+            for each(var source:String in row)
+            {
+               if(seen.hasOwnProperty(source))
+               {
+                  return null;
+               }
+               seen[source] = true;
+            }
+            if(common == null)
+            {
+               common = row.concat();
+            }
+            else
+            {
+               for(var i:int = common.length - 1; i >= 0; --i)
+               {
+                  if(row.indexOf(common[i]) < 0)
+                  {
+                     common.splice(i, 1);
+                  }
+               }
+            }
+         }
+         // More complex combinations keep the established compact fallback.
+         if(common == null || common.length != limit - 1)
+         {
+            return null;
+         }
+         var offsets:Object = {};
+         var widest:Number = 0;
+         for each(row in rows)
+         {
+            var alternatives:int = 0;
+            for each(source in row)
+            {
+               if(common.indexOf(source) < 0)
+               {
+                  if(++alternatives > 1)
+                  {
+                     return null;
+                  }
+                  offsets[source] = 0;
+                  widest = Math.max(widest, iconRight(source) - iconLeft(source));
+               }
+            }
+         }
+         if(widest <= 0)
+         {
+            return null;
+         }
+         var cursor:Number = widest + VISIBLE_GAP;
+         for each(source in common)
+         {
+            offsets[source] = cursor;
+            cursor += iconRight(source) - iconLeft(source) + VISIBLE_GAP;
+         }
+         return offsets;
+      }
+
 
       private static function measureColumnWidth(modes:Object, limit:int) : Number
       {
@@ -1339,7 +1489,9 @@ package nidin.server_mode_icons
          {
             var image:Image = i < images.length ? images[i] as Image : null;
             var source:String = String(modes[i].icon);
-            var targetX:Number = cursor - iconLeft(source);
+            var left:Number = sharedOffsets != null && sharedOffsets.hasOwnProperty(source) ?
+               Number(sharedOffsets[source]) : cursor;
+            var targetX:Number = left - iconLeft(source);
             cursor += iconRight(source) - iconLeft(source) + VISIBLE_GAP;
             var targetAlpha:Number = modes[i].active === false ? 0.35 : 1;
             if(image != null && image.source == source)

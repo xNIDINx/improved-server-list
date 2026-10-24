@@ -50,7 +50,7 @@ package
       {
          servers = payload != null && payload.servers != null ? payload.servers : {};
          online = payload != null && payload.online != null ? payload.online : {};
-         columns = payload != null ? Math.max(0, Math.min(6, int(payload.columnCount))) : 0;
+         columns = payload != null ? Math.max(0, Math.min(7, int(payload.columnCount))) : 0;
          for each(var decoration:ServerRowIcons in rows)
          {
             decoration.setModes(servers, columns);

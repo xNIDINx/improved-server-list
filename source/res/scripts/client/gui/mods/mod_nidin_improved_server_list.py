@@ -12,7 +12,7 @@ from gui.Scaleform.framework import ScopeTemplates, ViewSettings, g_entitiesFact
 from gui.Scaleform.framework.entities.View import View
 from gui.Scaleform.framework.managers.loaders import SFViewLoadParams
 from gui.mods.nidin_server_list import modes as policy
-from gui.mods.nidin_server_list import online
+from gui.mods.nidin_server_list import online, stronghold
 from gui.mods.nidin_server_list import settings as preferences
 from gui.impl import backport
 from helpers import dependency, getClientVersion, isPlayerAccount, time_utils
@@ -25,6 +25,7 @@ VIEW_ALIAS = MOD_ID + '.hook'
 VERSION = policy.client_version(getClientVersion(False))
 BUILD_REVISION = None
 CACHE_PATH = os.path.join('mods', 'temp', MOD_ID, 'cache.json')
+STRONGHOLD_CACHE_PATH = os.path.join('mods', 'temp', MOD_ID, 'stronghold.json')
 LEGACY_CACHE_PATHS = (
     os.path.join('mods', 'temp', 'nidin.server_mode_icons', 'cache.json'),
     os.path.join('mods', 'configs', 'nidin.server_mode_icons', 'cache.json'))
@@ -37,6 +38,7 @@ _appLoader = None
 _lobbyContext = None
 _installed = False
 _onlineService = None
+_strongholdService = None
 _onlineCallback = None
 _preferences = None
 
@@ -105,6 +107,17 @@ def _payload():
     counts = (_onlineService.get_by_periphery() if _onlineService is not None and AUTH_REALM == 'RU'
               and values['enabled'] and values['showOnline'] else {})
     payload['online'] = {}
+    markers = (_strongholdService.markers(time.time()) if _strongholdService is not None
+               and AUTH_REALM == 'RU' and values['enabled'] and values.get('stronghold', True) else {})
+    for host in native_hosts:
+        marker = markers.get(host.peripheryID)
+        if marker is not None:
+            for url in set((host.url, host.urlToken)):
+                if url:
+                    # Native URL aliases may share a list: never append in place.
+                    row = list(payload['servers'].get(url, ())) + [marker]
+                    payload['servers'][url] = row
+                    payload['columnCount'] = max(payload['columnCount'], len(row))
     for host in native_hosts:
         if host.peripheryID in counts:
             value = backport.getIntegralFormat(counts[host.peripheryID])
@@ -199,7 +212,7 @@ class NidinServerModeIconsHook(View):
             request.close()
         _views[self._appKey] = self
         _refresh()
-        _log('1.0.0 loaded; client schedule cache ready')
+        _log('1.0.2 loaded; server modes ready')
 
     def onServerListOpening(self):
         # Called synchronously by the native dropdown's SHOW_DROP_DOWN event,
@@ -283,6 +296,7 @@ def _onlineTick():
     _onlineCallback = None
     if not _installed:
         return
+    # Calendar activity is evaluated locally; startup alone refreshes its cache.
     # Expire displayed counts even when a list stays open and the proxy fails.
     # This reads local state only; opening the list triggers network refresh.
     if _appLoader.getSpaceID() in (GuiGlobalSpaceID.LOGIN, GuiGlobalSpaceID.LOBBY):
@@ -303,9 +317,23 @@ def _syncOnlineService():
         _onlineService.start(online.read_config())
 
 
+def _syncStrongholdService():
+    global _strongholdService
+    values = _preferences.values
+    wanted = AUTH_REALM == 'RU' and values['enabled'] and values.get('stronghold', True)
+    if not wanted:
+        service, _strongholdService = _strongholdService, None
+        if service is not None:
+            service.stop()
+    elif _strongholdService is None:
+        _strongholdService = stronghold.ScheduleService(online.fetch_url, time.time, _refresh, STRONGHOLD_CACHE_PATH)
+        _strongholdService.start()
+
+
 def _onPreferencesChanged():
     if _installed:
         _syncOnlineService()
+        _syncStrongholdService()
         _refresh()
 
 
@@ -332,6 +360,7 @@ def install():
     _lobbyContext.onServerSettingsChanged += _setSettings
     _installed = True
     _syncOnlineService()
+    _syncStrongholdService()
     if AUTH_REALM == 'RU':
         _onlineCallback = BigWorld.callback(5.0, _onlineTick)
     _onSpaceEntered(_appLoader.getSpaceID())
@@ -339,7 +368,7 @@ def install():
 
 
 def uninstall():
-    global _installed, _settings, _onlineService, _onlineCallback
+    global _installed, _settings, _onlineService, _onlineCallback, _strongholdService
     if not _installed:
         return
     _installed = False
@@ -354,6 +383,9 @@ def uninstall():
     if _onlineService is not None:
         _onlineService.stop()
         _onlineService = None
+    if _strongholdService is not None:
+        _strongholdService.stop()
+        _strongholdService = None
     _cancelCallback()
     _appLoader.onGUIInitialized -= _onGUIInitialized
     _appLoader.onGUISpaceEntered -= _onSpaceEntered

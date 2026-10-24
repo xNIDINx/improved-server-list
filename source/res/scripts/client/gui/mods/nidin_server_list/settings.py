@@ -3,8 +3,8 @@
 LINKAGE = 'nidin.improved_server_list'
 LEGACY_LINKAGE = 'nidin.server_mode_icons'
 MODE_CHOICES = (None, 'white_tiger', 'comp7', 'frontline', 'battle_royale', 'rift', 'arcade')
-MODES = MODE_CHOICES[1:]
-DEFAULTS = dict((mode, mode in ('white_tiger', 'comp7')) for mode in MODES)
+MODES = MODE_CHOICES[1:] + ('stronghold',)
+DEFAULTS = dict((mode, True) for mode in MODES)
 DEFAULTS.update(enabled=True, showOnline=True)
 
 
@@ -46,21 +46,27 @@ def make_template(templates):
         ('frontline', 'frontline', u'Линия фронта'),
         ('battle_royale', 'battle_royale', u'Стальной охотник'),
         ('rift', 'rift', u'Разлом'),
-        ('arcade', 'arcade', u'Аркада'))
+        ('arcade', 'arcade', u'Аркада'),
+        ('stronghold', 'stronghold', u'Укрепрайон: сражения'))
     explanation = (u'Показывать значок режима в раскрытом списке серверов. Вне игровых часов он затемнён, вне сезона скрыт.\n\n'
                    u'При первом входе после установки мода значок не отображается.\n\n'
                    u'Данные о режиме на сервере появляются после первого входа в ангар и используются на экране входа '
                    u'до обновления игры, включая микропатчи. После обновления нужно снова войти в ангар.')
     controls = []
     for mode, icon, name in modes:
-        tip = u'{BODY}%s{/BODY}' % explanation
+        mode_explanation = explanation
+        if mode == 'stronghold':
+            mode_explanation = (u'Показывать значок режима в раскрытом списке серверов. Вне игровых часов он затемнён, вне сезона скрыт.\n\n'
+                                u'При первом входе после установки мода значок может не отображаться.\n\n'
+                                u'Данные о режиме на сервере загружаются из публичного сервиса Укрепрайона и обновляются каждые 24 часа.')
+        tip = u'{BODY}%s{/BODY}' % mode_explanation
         label = (u'<img src="img://gui/maps/icons/nidin/server_mode_icons/%s_settings.png" '
                  u'width="16" height="16" vspace="-16" hspace="0"/> %s') % (icon, name)
         controls.append(templates.createCheckbox(label, mode, DEFAULTS[mode], tooltip=tip))
     online_tip = u'{BODY}Обновляется раз в 30 секунд{/BODY}'
     return {
         'modDisplayName': u'Улучшенный список серверов',
-        'settingsVersion': 9, 'enabled': True,
+        'settingsVersion': 11, 'enabled': True,
         'column1': controls[:3] + [templates.createCheckbox(u'Показывать онлайн серверов', 'showOnline', True,
                                                            tooltip=online_tip)],
         'column2': controls[3:]

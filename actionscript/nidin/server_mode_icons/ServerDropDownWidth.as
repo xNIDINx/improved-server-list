@@ -260,7 +260,9 @@ package nidin.server_mode_icons
             var content:Number = hasOnline ? onlineRequirement : plainRequirement;
             requiredMenuWidth = reserve > 0 || hasOnline ? content + reserve : baseMenu;
             var targetMenu:Number = isNaN(requiredMenuWidth) ? baseMenu : Math.max(baseMenu, Math.ceil(requiredMenuWidth));
-            var targetWidth:Number = nativeWidth + targetMenu - baseMenu;
+            // Online and mode icons exist only inside the popup. Its extra
+            // space must not stretch the selected-server button on first open.
+            var targetWidth:Number = nativeWidth;
             var resized:Boolean = false;
             var anchor:Point = row.localToGlobal(new Point());
             if(row.width != targetWidth)
